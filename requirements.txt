@@ -1,0 +1,9 @@
+# 依赖(纯 CPU 即可,无需 GPU)
+numpy>=1.24
+scipy>=1.10
+pandas>=2.0
+python-igraph>=0.11
+rustworkx>=0.14
+networkx>=3.0
+matplotlib>=3.7
+scikit-learn>=1.3

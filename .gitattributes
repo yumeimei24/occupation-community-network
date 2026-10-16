@@ -1,0 +1,5 @@
+# 统一换行(避免 Windows 上写出的 CRLF 与仓库内容判定不一致)
+* text=auto eol=lf
+*.png binary
+*.npz binary
+*.pdf binary
