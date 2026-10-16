@@ -1,104 +1,85 @@
-# Validation
+# 验证
 
-Everything here is reproducible from the repository (no data required beyond the
-synthetic generator).
+本文档中的所有结果都可以在本仓库复现(除合成生成器外不需要任何数据)。
 
-## 1. Equivalence of the block-decomposition PMFG and the naive greedy PMFG
+## 1. 块分解 PMFG 与朴素贪心 PMFG 的等价性
 
-**Claim.** For the same ordered candidate list, `pmfg_block` and `pmfg_reference`
-accept exactly the same edge set. The block decomposition changes *where* planarity is
-tested, not *which* edges are accepted.
+**命题。** 对同一张有序候选边表,`pmfg_block` 与 `pmfg_reference` 接受的边集完全相同。
+块分解改变的是平面性**在哪里**被检验,而不是**哪些**边被接受。
 
-**Protocol.** For each random trial: draw a random incidence matrix (two regimes —
-independent Bernoulli associations, and a community-structured generator with shared
-feature pools plus a general pool), build the ordered candidate list with
-`ochiai_candidates`, run both implementations, and compare the edge sets as sets of
-unordered pairs. Trials vary the number of nodes, the number of features, the number
-of candidates, and (in every fourth trial) randomly reshuffle the order *within*
-similarity ties, which is the hardest case for the block bookkeeping.
+**协议。** 每个随机试验:生成随机关联矩阵(两种机制——独立伯努利关联,以及带共享
+特征池 + 通用池的社区结构生成器),用 `ochiai_candidates` 构造有序候选边表,两种实现
+各跑一遍,把边集当作无序点对的集合比较。试验改变节点数、特征数、候选边数,并在每第
+四个试验中**随机打乱相似度并列组内部的顺序**——这是对块维护逻辑最苛刻的情形。
 
 ```bash
-python validation/random_trials.py --trials 204        # full evidence (~15 min)
-python validation/random_trials.py --trials 60         # quick check
-python tests/run_tests.py                              # unit tests + 12 random trials
+python validation/random_trials.py --trials 204        # 完整证据(约 15 分钟)
+python validation/random_trials.py --trials 60         # 快速检查
+python tests/run_tests.py                              # 单元测试 + 12 个随机试验
 ```
 
-**Result.** `validation/results_random_trials.csv` records one row per trial:
+**结果。** `validation/results_random_trials.csv` 每次试验一行:
 `n_nodes, n_feats, mode, shuffle_ties, n_candidates, edges_block, edges_reference,
-identical, n_missing, n_extra`. `identical == True` and `n_missing == n_extra == 0`
-for all trials. The bundled unit tests additionally check hand-constructed cases:
+identical, n_missing, n_extra`。全部试验 `identical == True` 且
+`n_missing == n_extra == 0`(当前记录:204/204 一致,最大 315 节点、46,220 条候选边、
+939 条接受边)。随包的单元测试另外检验了一批手构造情形:
 
-| case | expected | reason |
+| 情形 | 期望 | 原因 |
 |---|---|---|
-| `K5` (all 10 pairs as candidates) | 9 edges accepted | `K5 − e` is the maximal planar graph on 5 vertices (triangular bipyramid) |
-| `K3,3` | 8 of 9 accepted | non-planar graph; the greedy saturates at 8 |
-| star / tree | all accepted | trees are planar |
-| bridge + triangle + chords | identical to reference | exercises the block–cut path merge |
+| `K5`(10 对全部作候选) | 接受 9 条 | `K5 − e` 是 5 个顶点的极大平面图(三角双锥) |
+| `K3,3` | 9 条中接受 8 条 | 非平面图,贪心在 8 条处饱和 |
+| 星形 / 树 | 全部接受 | 树是平面的 |
+| 桥 + 三角形 + 弦 | 与参照实现一致 | 检验块—割点路径合并逻辑 |
 
-## 2. Real-data check (application to a job–task network)
+## 2. 真实数据核对(应用到岗位—任务网络)
 
-On a real job–task network (6,147 job nodes, 5,041 O*NET task nodes, 243,010 candidate
-pairs), the block-decomposition implementation and the naive whole-graph reference
-implementation return the **same 14,954 edges — identical sets, not merely identical
-counts** — and the final graph passes an independent whole-graph planarity check
-(`rustworkx.is_planar`).
+在一个真实的岗位—任务网络上(6,147 个岗位节点、5,041 个 O*NET 任务节点、243,010 条
+候选边),块分解实现与朴素整图参照实现返回**同样的 14,954 条边——边集完全相同,而不只
+是数量相同**——且最终图通过了独立的整图平面性检查(`rustworkx.is_planar`)。
 
-What the block version saves is per-test *size*, not the number of tests: every
-same-component candidate still needs one accept/reject decision. In this instance the
-largest 2-connected block contains 3,979 nodes (65% of the node set) and 11,321 edges
-(76% of the edge set), and there are 871 blocks in total, so a whole-graph test is
-replaced by a test on the affected path blocks — i.e. at most ~65–76% of the graph, and
-much less for the 519 bridge blocks and the many small blocks. Measured wall-clock on
-this instance was within ~20–35% between the two implementations on a partly loaded
-16-core machine, in favour of the block version in the cleanest comparison (819 s vs
-~1,000 s); the advantage grows with the number of small components (as in the synthetic
-trials) and is bounded by the size of the giant 2-connected core, which is the real
-cost driver at this scale.
+块分解节省的是每次检验的**规模**,不是检验次数:同一连通分量内的每条候选边仍需一次
+接受/拒绝判定。该实例中最大的 2-连通块包含 3,979 个节点(占节点集 65%)、11,321 条边
+(占边集 76%),全图共 871 个块,因此"整图检验"被替换为"受影响路径块上的检验"——最多
+约等于整图的 65%–76%,对 519 个桥块和大量小块则远小于此。在部分负载的 16 核机器上
+实测两种实现的墙钟时间相差约 20%–35%,最干净的一次对比有利于块分解实现(819 秒 vs
+约 1,000 秒);优势随小连通分量增多而变大(如合成试验),上限由巨型 2-连通核心的规模
+决定——它才是这个量级下真正的成本来源。
 
-*Note on provenance:* this check ran on the authors' job-posting data, which is not
-redistributed in this repository. The synthetic generator and the random-trial suite
-reproduce the same equivalence property without any restricted data.
+*来源说明:* 该核对使用了作者的招聘数据,不随本仓库分发。合成生成器与随机试验套件
+在没有任何受限数据的情况下复现了同样的等价性质。
 
-## 3. Tie-order robustness
+## 3. 并列换序稳健性
 
 ```bash
 python validation/tie_order_robustness.py --runs 5 --weighting both
 ```
 
-Re-runs the pipeline on the same candidate set with uniformly randomised order inside
-each similarity-tie group and reports, per run: number of accepted edges, Jaccard
-overlap of the edge set with the baseline, modularity, number of communities, NMI/ARI
-of the community partition against the baseline, and average pairwise Jaccard of
-community core-feature sets. Output: `results_tie_order_robustness.csv`.
+在同一候选集上,对每个相似度并列组内部均匀随机换序后重跑整条管线,逐次报告:接受
+边数、边集与基线的 Jaccard 重叠、模块度、社区数、划分相对基线的 NMI/ARI、以及社区
+核心特征集合两两 Jaccard 的平均值。输出:`results_tie_order_robustness.csv`。
 
-Synthetic data (500 nodes, 5 randomised draws) — the two similarity schemes behave
-qualitatively differently:
+合成数据(500 节点,5 次随机抽样)——两种相似度口径表现定性不同:
 
-| weighting | edge Jaccard vs baseline | n_edges | modularity | n_communities | NMI vs baseline |
+| 口径 | 边集 Jaccard(vs 基线) | 边数 | 模块度 | 社区数 | NMI(vs 基线) |
 |---|---|---|---|---|---|
-| `binary` (Ochiai) | 0.63 – 0.69 | 1,389 – 1,413 | 0.828 – 0.843 | 11 – 12 | 0.84 – 0.86 |
-| `idf` (default) | **1.000** | 1,360 (all runs) | 0.8522 (all runs) | 14 (all runs) | **1.000** |
+| `binary`(Ochiai) | 0.63 – 0.69 | 1,389 – 1,413 | 0.828 – 0.843 | 11 – 12 | 0.84 – 0.86 |
+| `idf`(默认) | **1.000** | 1,360(全部相同) | 0.8522(全部相同) | 14(全部相同) | **1.000** |
 
-Reading: binary similarity leaves about a third of the filtered graph to the arbitrary
-order inside tie groups, so its edge set is not identified (aggregate statistics are
-nevertheless stable). IDF weighting makes ties negligible, and with the seeded Louvain
-the pipeline reproduces bit-for-bit across draws. The script asserts, for every
-shuffled draw, that the similarity multiset is unchanged and that the order is still
-non-increasing — the two mistakes that silently turn "shuffle ties" into "reverse the
-whole candidate list" and fake a large sensitivity.
+解读:二值相似度把约三分之一的过滤图交给了并列组内部的任意顺序,因此其边集不可识别
+(总量统计仍然稳定)。IDF 加权使并列可忽略,配合固定种子的 Louvain,整条管线在各次
+抽样间逐位一致。脚本对每次换序都断言:相似度多重集不变、顺序仍非升——这两个正是会把
+"并列换序"悄悄变成"整体反转候选序列"、从而伪造出巨大敏感性的错误。
 
-The equivalent real-data check on the authors' job–task network is reported in the
-paper; the script accepts `--incidence` so it can be re-run on any table.
+真实数据上的同类核对(作者的岗位—任务网络)在论文中报告;脚本支持 `--incidence`,
+可在任意长表上重跑。
 
-## 4. Determinism of the community step
+## 4. 社区发现步骤的确定性
 
-`igraph.community_multilevel` is randomised: calling it repeatedly on the *same* graph
-returns different partitions (checked in `tests/debug_louvain_order.py`-style probes and
-in the development log of this repository). `tasknet.louvain` therefore
+`igraph.community_multilevel` 是随机算法:在**同一张图**上反复调用会返回不同划分。
+因此 `tasknet.louvain`:
 
-* canonicalises the edge order (`canonical=True`, sorting by `(min, max)`), so the
-  partition is a function of the edge *set* rather than of the insertion order, and
-* fixes the igraph RNG (`seed=42` by default).
+* 规范化边序(`canonical=True`,按 `(min, max)` 排序),使划分成为**边集**的函数而非
+  建图顺序的函数;
+* 固定 igraph 随机数发生器(默认 `seed=42`)。
 
-With both, repeated runs on the same graph agree exactly (`n_edges`, modularity,
-partition).
+两者结合后,同一张图重复运行的结果完全一致(边数、模块度、划分)。

@@ -3,7 +3,7 @@
 
 背景
 ----
-PMFG(Planar Maximally Filtered Graph, Tumminello et al. 2005)按距离(相似度)
+PMFG(Planar Maximally Filtered Graph)按距离(相似度)
 顺序逐条考察候选边,仅当加入后图仍保持平面性时才接受,得到的图在「保留平面性」
 这一约束下容纳了最强的关联结构。经典算法需要对每个候选边做一次平面性检验;
 朴素实现每次都在整张图上检验,当节点数上万、候选边上百万时非常慢。

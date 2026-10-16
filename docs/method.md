@@ -1,174 +1,134 @@
-# Method
+# 方法
 
-This document specifies what the package computes, why each step is the way it is,
-and where it deviates from the portfolio-herding literature it borrows from.
+本文档说明这个包计算什么、每一步为什么这样做、以及由此带来的设计取舍。
 
-## 1. From bipartite association data to a node-level similarity graph
+## 1. 从二部关联数据到节点相似度网络
 
-Input is a **long-format incidence table** `(node, feature)` — e.g. `(job_posting, task)`,
-`(worker, skill)`, `(firm, patent class)`. Duplicates are collapsed, so the incidence
-matrix `A` is binary: `A[i, t] = 1` iff node `i` is associated with feature `t`.
+输入是一张**长表** `(node, feature)` —— 例如 `(岗位, 任务)`、`(工人, 技能)`、
+`(企业, 专利分类)`。重复对合并,得到 0/1 关联矩阵 `A`:`A[i, t] = 1` 当且仅当
+节点 `i` 具有特征 `t`。
 
-Node `i`'s feature set is `T_i = {t : A[i, t] = 1}`, and the similarity between two
-nodes is the cosine similarity of their incidence rows,
+节点 `i` 的特征集合为 `T_i = {t : A[i, t] = 1}`。两个节点的相似度取其关联行的
+余弦相似度:
 
 ```
 rho_ij = |T_i ∩ T_j| / sqrt(|T_i| |T_j|),
 ```
 
-which for binary data is the **Ochiai coefficient**. The associated distance is the
-one used in the PMFG literature (Tumminello et al., 2005; Aste et al., 2005),
+对二值数据即 **Ochiai 系数**。对应的距离取
 
 ```
 d_ij = 2 (1 - rho_ij),
 ```
 
-which is a monotone decreasing function of `rho_ij`; therefore processing candidate
-pairs **in decreasing similarity order** is identical to processing them in increasing
-distance order. Only pairs with `rho_ij > 0` (at least one shared feature, hence finite
-distance) enter the candidate set. This is the one structural difference from a
-complete-graph PMFG: pairs with no shared feature have infinite distance and can never
-be added, so they remain isolated singletons (see §5).
+它是 `rho_ij` 的单调递减函数,因此**按相似度降序**处理候选对与**按距离升序**处理完全
+等价。只有 `rho_ij > 0`(至少共享一个特征,距离有限)的对进入候选集。这是与
+"完全图 PMFG"唯一的结构性差别:无共享特征的对距离无穷,永远不会被加入,只能保持
+孤立(见 §5)。
 
-## 2. Planar maximally filtered graph (PMFG)
+默认口径其实是 **IDF 加权余弦**(见 §6):给特征加权重
+`w_t = log((N+1)/(df_t+1)) + 1`,
 
-Given the candidate list sorted by decreasing similarity, the greedy PMFG accepts an
-edge if and only if the graph remains **planar** after adding it. The result is a
-maximal planar subgraph: no further candidate edge can be added without breaking
-planarity, and the accepted edges are the strongest associations compatible with
-planarity. This is the filtering step that makes the subsequent community detection
-non-trivial: the graph keeps only `O(3n)` edges out of up to millions of candidate
-pairs.
+```
+rho_ij = Σ_t w_t² A_it A_jt / (√(Σ_t w_t² A_it) · √(Σ_t w_t² A_jt)),
+```
 
-### 2.1 Exact block-decomposition algorithm
+`weighting="binary"` 时 `w_t ≡ 1` 退化为上式的纯二值 Ochiai。两种口径共用同一套下游
+流程;加权的目的在 §6 说明(让相似度近似连续、并列消失、PMFG 可识别)。
 
-The textbook implementation tests planarity of the **whole graph** for every candidate
-edge. With hundreds of thousands to millions of candidates this is the runtime
-bottleneck. `tasknet.pmfg.pmfg_block` restricts each test to the part of the graph
-that can actually change, using three standard facts about biconnected components
-("blocks"):
+## 2. 极大平面过滤图(PMFG)
 
-1. A graph is planar **iff every block is planar** (planarity is a property of the
-   disjoint union of blocks).
-2. Adding an edge `e = (i, j)` merges exactly the blocks lying on the `i`–`j` path in
-   the **block–cut tree** into one new block `B* = (∪ blocks on the path) ∪ {e}`; all
-   other blocks are untouched. If `i` and `j` lie in different connected components,
-   `e` is a new bridge block and planarity is automatic.
-3. Therefore `G + e` is planar **iff for every block `B_m` on that path, the graph
-   `B_m` plus the chord `(p_m, q_m)` is planar**, where `p_m, q_m` are the entry/exit
-   cut vertices of `B_m` on the path (for the two end blocks, `i` and `j` are used).
-   If the chord already is an edge of `B_m`, or `B_m` is a bridge (two vertices, one
-   edge), that block passes automatically.
+候选边按相似度降序排列后,贪心 PMFG 的规则是:加入某条边当且仅当加入后图仍保持
+**平面**。结果是一个极大平面子图:任何后续候选边都无法再加入而不破坏平面性,保留下
+来的边是"与平面性相容的最强关联"。这一步把后续社区发现变得有意义:图从至多数百万
+条候选边压缩到 `O(3n)` 条。
 
-Two exact cheap pre-tests are kept:
-Euler's bound `E ≤ 3V − 6` on the block, and the `K5 − e` obstruction (if `i` and `j`
-have three mutually adjacent common neighbours, then `{i, j, a, b, c}` induces
-`K5 − e`, which is non-planar, so the edge is rejected without a planarity call).
+### 2.1 精确的块分解算法
 
-Planarity itself is decided by `rustworkx.is_planar` (Brandes' linear-time algorithm).
-The implementation maintains one `rustworkx` graph per block, with a local vertex
-numbering, and tests a candidate chord by *add → test → roll back*.
+教科书实现每加一条候选边都对**整图**做一次平面性检验。候选边达到数十万至数百万时,
+这是运行时瓶颈。`tasknet.pmfg.pmfg_block` 把每次检验限制在"真正会变化的部分",依据
+双连通分量("块")的三条标准性质:
 
-**Equivalence.** The algorithm changes only *where* planarity is decided — never the
-accept/reject decision for any candidate. `validation/random_trials.py` and
-`tests/test_pmfg_exact.py` verify this empirically against the naive whole-graph
-implementation on random and community-structured incidence data, including
-tie-shuffled candidate orders; see `docs/validation.md`.
+1. 图是平面的 **当且仅当它的每个块都是平面的**(平面性是块不交并的性质)。
+2. 加边 `e = (i, j)` 恰好把块—割点树上 `i` 到 `j` 路径上的那些块合并成一个新块
+   `B* = (∪ 路径上的块) ∪ {e}`;其余块不受影响。若 `i`、`j` 在不同连通分量,`e`
+   自成一个新桥,平面性自动成立。
+3. 因此 `G + e` 是平面的 **当且仅当路径上每个块 `B_m` 加上弦 `(p_m, q_m)` 后是平面的**,
+   其中 `p_m, q_m` 是 `B_m` 在路径上的入/出口割点(两个端块直接用 `i`、`j`)。若该弦
+   本来就是 `B_m` 的边,或 `B_m` 是桥(两个顶点一条边),该块自动通过。
 
-### 2.2 What we deliberately did **not** use
+另保留两个精确的廉价预检:块上的 Euler 上界 `E ≤ 3V − 6`,以及 `K5 − e` 障碍
+(若 `i`、`j` 存在三个两两相邻的公共邻居,则 `{i, j, a, b, c}` 导出 `K5 − e`,非平面,
+直接拒绝,不必调用平面性判定)。
 
-An embedding-based shortcut (maintain a rotation system, accept a chord iff its
-endpoints share a face) is *sound but not complete*: by Whitney's theorem the face
-structure is unique only for **3-connected** graphs, so for 2-connected blocks with
-2-vertex cuts the face test can reject edges the greedy accepts. Measured on real data
-this changed ~13% of the edge set, i.e. it is not equivalent — hence the block
-decomposition above, which is exact.
+平面性判定本身用 `rustworkx.is_planar`(Brandes 线性时间算法)。实现为每个块维护一个
+局部编号的 `rustworkx` 图,检验候选弦的方式是 *加入 → 检验 → 回滚*。
 
-## 3. Community detection
+**等价性。** 该算法只改变平面性"在哪里"被检验,不改变任何候选边的接受/拒绝决定。
+`validation/random_trials.py` 与 `tests/test_pmfg_exact.py` 在随机及带社区结构的关联
+数据(包括并列换序的候选顺序)上对朴素整图实现做了经验验证;见 `docs/validation.md`。
 
-The PMFG is partitioned with **Louvain** (`igraph.Graph.community_multilevel`,
-Blondel et al., 2008), i.e. modularity maximisation with the standard multi-level
-heuristic, on the *unweighted* filtered graph (`resolution = 1` by default; the
-similarity values are used for filtering, not for the modularity objective). Isolated
-nodes form singleton communities and are reported as such rather than dropped.
+### 2.2 我们刻意**没有**采用的方案
 
-Because community labels from modularity maximisation can be compared across runs, the
-package reports the statistics that matter for interpretation:
+基于嵌入的捷径(维护旋转系统,当且仅当弦的两端共面时接受)是**可靠但不完备**的:
+按 Whitney 定理,面结构只在 **3-连通**图上唯一;对带 2 点割的 2-连通块,共面检验会
+错误拒绝贪心会接受的边。在真实数据上实测该捷径改变了约 13% 的边集,即它与贪心
+不等价——所以采用上面的块分解,它是精确的。
 
-* number of communities and their size distribution;
-* modularity;
-* mean similarity of pairs inside vs. across communities (using the candidate list),
-  which is the "is the partition real?" diagnostic;
-* the share of nodes/postings inside communities of size ≥ k (herding intensity);
-* the average pairwise Jaccard overlap of communities' core-feature sets, i.e. whether
-  several communities do the same thing or different things.
+## 3. 社区发现
 
-## 4. Herding (core) features
+在 PMFG 上用 **Louvain**(`igraph.Graph.community_multilevel`,模块度最大化的多层
+启发式)做社区划分,使用**不加权**的过滤图(默认 `resolution = 1`;相似度用于过滤,
+不进入模块度目标)。孤立节点自成单点社区,如实报告而非丢弃。
 
-Following the portfolio-herding design, features are ranked **within each community**
-by their prevalence `k / n_nodes` (share of the community's nodes that have the
-feature). The top 10%, 20% and 30% of the within-community ranking (default headline:
-**top 20%**) and communities with `n_nodes ≥ 2` define the community's **core
-features** — the analogue of "herded stocks" in the fund-holding application, i.e. the
-tasks that a job cluster is built around.
+为使社区划分可比较、可复现,包报告以下解释所需的统计量:
 
-## 5. Connectivity is not herding
+* 社区数量与规模分布;
+* 模块度;
+* 社区内部 vs 跨社区的平均相似度(用候选边表计算)——"这个划分是真的吗"的诊断;
+* 规模 `≥ k` 的社区所覆盖的节点/岗位份额(抱团强度);
+* 各社区核心特征集合两两 Jaccard 的平均值——多个社区是在做同一件事还是不同的事。
 
-Filtered graphs are sparse by construction and contain many **bridges** (cut edges):
-chain-like, indirect associations. Counting all connected nodes as "herded" would
-therefore overstate herding. The package separates the two notions:
+## 4. 抱团(核心)特征
 
-* **blocks** (2-connected components) — sets of nodes with ≥ 2 internally
-  vertex-disjoint paths to each other; the graph-theoretic counterpart of herding;
-* **within-community edge density** — realised edges over possible edges inside each
-  community;
-* **bridge share** — fraction of filtered edges that are cut edges;
-* **concentration** — HHI of the node weight (e.g. postings) across communities.
+在每个社区**内部**按覆盖率 `k / n_nodes`(社区内拥有该特征的节点比例)给特征排序,
+取社区内排名的前 10%、20%、30%(默认头条口径:**前 20%**)、且社区规模 `n_nodes ≥ 2`,
+定义为该社区的**核心特征**——即一个岗位簇所围绕的任务。
 
-## 6. Discrete similarities, ties, and what we do about it
+## 5. 连通不等于抱团
 
-Binary similarity takes very few distinct values: with one shared feature,
-`rho = 1/sqrt(|T_i||T_j|)`. In a large job–task network we observe a few hundred
-distinct values among hundreds of thousands of candidate pairs, with individual ties
-containing thousands of pairs. **The PMFG is therefore not uniquely defined**: any
-order within a tie group yields an equally admissible maximal planar graph.
+过滤图天生稀疏,且包含大量**桥**(割边):链式的、间接的关联。把所有连通节点都算成
+"抱团"会严重高估。包把两个概念分开:
 
-`validation/tie_order_robustness.py` measures how much this matters, by re-running the
-whole pipeline with uniformly randomised order inside tie groups (synthetic data,
-500 nodes, 5 draws):
+* **块**(2-连通分量):节点间存在 ≥ 2 条内部点不相交路径的集合——抱团的图论对应物;
+* **社区内部边密度**:社区内实际边数除以可能边数;
+* **桥占比**:过滤图中割边的比例;
+* **集中度**:节点权重(如发文量)跨社区的 HHI。
 
-| similarity | distinct values | tied edges | edge-set Jaccard vs baseline | edges | modularity | NMI of partition |
+## 6. 离散相似度、并列问题与我们的处理
+
+二值相似度的取值极少:只共享一个特征时 `rho = 1/sqrt(|T_i||T_j|)`。大型岗位—任务网络
+中,数十万候选对往往只有几百个不同取值,单个并列组可以包含数千条边。
+**因此 PMFG 不再唯一**:并列组内任何顺序都给出同样合法的极大平面图。
+
+`validation/tie_order_robustness.py` 度量这有多要紧:在并列组内部均匀随机换序、整条
+管线重跑(合成数据,500 节点,5 次抽样):
+
+| 相似度口径 | 不同取值数 | 并列边占比 | 边集 Jaccard(vs 基线) | 边数 | 模块度 | 划分 NMI |
 |---|---|---|---|---|---|---|
-| binary Ochiai | few hundred | large | **0.63 – 0.69** | 1,389 – 1,413 | 0.828 – 0.843 | 0.84 – 0.86 |
-| IDF-weighted cosine | ≈ #candidates | ≈ 0.1% | **1.000** | 1,360 (constant) | 0.8522 (constant) | **1.000** |
+| 二值 Ochiai | 几百 | 大 | **0.63 – 0.69** | 1,389 – 1,413 | 0.828 – 0.843 | 0.84 – 0.86 |
+| IDF 加权余弦 | ≈ 候选边数 | ≈ 0.1% | **1.000** | 1,360(恒定) | 0.8522(恒定) | **1.000** |
 
-Two conclusions:
+两个结论:
 
-1. **With binary similarity, roughly a third of the filtered edge set is an artefact of
-   one arbitrary tie break.** Aggregate structure is fairly stable (modularity,
-   community count, size distribution move only slightly), but edge-level and
-   community-level claims are not identified.
-2. **IDF weighting removes the problem.** Down-weighting ubiquitous features by
-   `w_t = log((N+1)/(df_t+1)) + 1` makes the similarity nearly continuous, ties vanish
-   (≈0.1% of candidate edges), and the pipeline becomes an exact deterministic function
-   of the incidence data. It is also the more sensible similarity for this kind of data:
-   sharing a rare, specific task should count for more than sharing a generic one.
+1. **二值相似度下,约三分之一的过滤边集来自一次任意的并列取舍。** 总量结构相当稳定
+   (模块度、社区数、规模分布只小幅波动),但边级别与社区级别的结论不可识别。
+2. **IDF 加权消除了这个问题。** 用 `w_t = log((N+1)/(df_t+1)) + 1` 压低无处不在特征的
+   权重后,相似度近似连续,并列基本消失(约占候选边 0.1%),整条管线成为关联数据的
+   精确确定性函数。它对这类数据也是更合理的相似度:共享一个**罕见、具体**的任务应当
+   比共享一个人人都有的通用任务更能说明两个岗位相似。
 
-`tasknet` therefore defaults to `weighting="idf"` and keeps `weighting="binary"` for
-replication of the tie-prone variant, with `validation/tie_order_robustness.py` as the
-documented sensitivity check. Louvain is called with a fixed RNG seed, because
-`igraph.community_multilevel` is itself randomised: without a seed the same graph gives
-different partitions across calls (verified in `tests/`).
-
-## 7. References
-
-* Tumminello, M., Aste, T., Di Matteo, T., Mantegna, R. N. (2005). A tool for
-  filtering information in complex systems. *PNAS* 102(30), 10421–10426.
-* Aste, T., Di Matteo, T., Tumminello, M., Mantegna, R. N. (2005). Correlation
-  filtering and taxonomies in financial networks.
-* Blondel, V. D., Guillaume, J.-L., Lambiotte, R., Lefebvre, E. (2008). Fast
-  unfolding of communities in large networks. *J. Stat. Mech.*
-* Brandes, U. (2007). The left-right planarity test.
-* Whitney, H. (1932). Non-separable and planar graphs. *Trans. AMS* 34, 339–362.
-* 田正磊, 刘洋溢, 罗荣华 (2025). 基金抱团的成因、演化与经济后果研究——基于网络社区的方法.
-  《管理世界》2025 年第 6 期. (The portfolio-herding design this package ports.)
+因此 `tasknet` 默认 `weighting="idf"`,同时保留 `weighting="binary"` 供复现并列敏感的
+口径,并以 `validation/tie_order_robustness.py` 作为文档化的敏感性检验。Louvain 调用
+固定了随机种子——`igraph.community_multilevel` 本身是随机算法,不固定种子时同一张图
+多次调用会给出不同划分(已在 `tests/` 中验证)。

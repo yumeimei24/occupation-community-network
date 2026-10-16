@@ -1,14 +1,9 @@
-# Notice
+# 说明
 
-* This repository is part of a manuscript under **double-blind review**. Author names,
-  affiliations and acknowledgements are deliberately omitted; please do not attempt to
-  identify the authors.
-* Third-party components used at runtime: `rustworkx` (planarity test, Brandes'
-  left-right algorithm), `python-igraph` (Louvain), `networkx` (block decomposition,
-  bridges), `scipy`/`numpy`/`pandas`. Each is distributed under its own license; none is
-  vendored here.
-* `examples/synthetic.py` generates artificial data only. It contains no scraped or
-  otherwise restricted records.
-* O*NET task statements referenced in the empirical application are the property of the
-  U.S. Department of Labor, Employment and Training Administration, and are not
-  redistributed in this repository.
+* 本仓库随一份正在**双盲评审**的投稿提供。作者姓名、单位与致谢刻意省略,请勿尝试
+  推断作者身份;提交记录使用匿名身份。
+* 运行期使用的第三方组件:`rustworkx`(平面性判定,Brandes 左右算法)、
+  `python-igraph`(Louvain)、`networkx`(块分解、桥)、`scipy`/`numpy`/`pandas`。
+  各自遵循其自身许可,本仓库未内嵌其源码。
+* `examples/synthetic.py` 只生成人工数据,不包含任何爬取或受限的记录。
+* 实证部分引用的 O*NET 任务陈述版权归美国劳工部就业与培训管理局所有,本仓库不再分发。
