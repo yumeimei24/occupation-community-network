@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """命令行入口。
 
-    python -m tasknet demo    --out out/demo            # 合成数据全流程演示
-    python -m tasknet run     --incidence data.csv --out out/run \
+    python -m ocnet demo    --out out/demo            # 合成数据全流程演示
+    python -m ocnet run     --incidence data.csv --out out/run \
                               --node-col job_id --feature-col task_id
-    python -m tasknet validate --trials 60              # 精确性验证(块分解 vs 参照)
+    python -m ocnet validate --trials 60              # 精确性验证(块分解 vs 参照)
 """
 
 from __future__ import annotations
@@ -72,7 +72,7 @@ def _figure(outdir, res):
 def cmd_demo(args):
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
         os.path.dirname(os.path.abspath(__file__)))), "examples"))
-    from tasknet import prepare_incidence, run_network
+    from ocnet import prepare_incidence, run_network
     from synthetic import make_synthetic
     inc_long, meta, tt = make_synthetic(seed=args.seed, n_jobs=args.n_jobs)
     inc, nodes, feats = prepare_incidence(inc_long, "job_id", "task_id")
@@ -90,7 +90,7 @@ def cmd_demo(args):
 
 
 def cmd_run(args):
-    from tasknet import prepare_incidence, run_network
+    from ocnet import prepare_incidence, run_network
     df = pd.read_csv(args.incidence)
     inc, nodes, feats = prepare_incidence(df, args.node_col, args.feature_col)
     meta = None
@@ -114,7 +114,7 @@ def cmd_validate(args):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog="tasknet", description="岗位—任务网络社区发现工具包")
+    ap = argparse.ArgumentParser(prog="ocnet", description="岗位—任务网络社区发现工具包")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     d = sub.add_parser("demo", help="合成数据全流程演示")

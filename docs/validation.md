@@ -76,7 +76,7 @@ python validation/tie_order_robustness.py --runs 5 --weighting both
 ## 4. 社区发现步骤的确定性
 
 `igraph.community_multilevel` 是随机算法:在**同一张图**上反复调用会返回不同划分。
-因此 `tasknet.louvain`:
+因此 `ocnet.louvain`:
 
 * 规范化边序(`canonical=True`,按 `(min, max)` 排序),使划分成为**边集**的函数而非
   建图顺序的函数;

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""tasknet —— 岗位—任务网络的 PMFG 过滤与社区(抱团)发现工具包。
+"""ocnet —— 岗位—任务网络的 PMFG 过滤与社区(抱团)发现工具包。
 
 模块
 ----
@@ -8,7 +8,7 @@ pmfg       : 极大平面过滤图(PMFG)的精确实现(双连通块分解)与�
 community  : Louvain 社区发现、社区统计、抱团任务(核心任务)
 structure  : 图的块分解、边同质性、社区密度等结构刻画
 pipeline   : 端到端流程
-cli        : 命令行入口(python -m tasknet)
+cli        : 命令行入口(python -m ocnet)
 """
 
 __version__ = "0.1.0"

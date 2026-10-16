@@ -46,7 +46,7 @@ rho_ij = Σ_t w_t² A_it A_jt / (√(Σ_t w_t² A_it) · √(Σ_t w_t² A_jt)),
 ### 2.1 精确的块分解算法
 
 教科书实现每加一条候选边都对**整图**做一次平面性检验。候选边达到数十万至数百万时,
-这是运行时瓶颈。`tasknet.pmfg.pmfg_block` 把每次检验限制在"真正会变化的部分",依据
+这是运行时瓶颈。`ocnet.pmfg.pmfg_block` 把每次检验限制在"真正会变化的部分",依据
 双连通分量("块")的三条标准性质:
 
 1. 图是平面的 **当且仅当它的每个块都是平面的**(平面性是块不交并的性质)。
@@ -128,7 +128,7 @@ rho_ij = Σ_t w_t² A_it A_jt / (√(Σ_t w_t² A_it) · √(Σ_t w_t² A_jt)),
    精确确定性函数。它对这类数据也是更合理的相似度:共享一个**罕见、具体**的任务应当
    比共享一个人人都有的通用任务更能说明两个岗位相似。
 
-因此 `tasknet` 默认 `weighting="idf"`,同时保留 `weighting="binary"` 供复现并列敏感的
+因此 `ocnet` 默认 `weighting="idf"`,同时保留 `weighting="binary"` 供复现并列敏感的
 口径,并以 `validation/tie_order_robustness.py` 作为文档化的敏感性检验。Louvain 调用
 固定了随机种子——`igraph.community_multilevel` 本身是随机算法,不固定种子时同一张图
 多次调用会给出不同划分(已在 `tests/` 中验证)。

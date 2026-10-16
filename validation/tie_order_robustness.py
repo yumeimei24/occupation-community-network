@@ -30,9 +30,9 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(ROOT, "src"))
 sys.path.insert(0, os.path.join(ROOT, "examples"))
 
-from tasknet import (ochiai_candidates, idf_weights, pmfg_block, louvain,    # noqa: E402
+from ocnet import (ochiai_candidates, idf_weights, pmfg_block, louvain,    # noqa: E402
                      core_tasks, community_stats, block_decomposition)
-from tasknet.similarity import incidence_from_long                          # noqa: E402
+from ocnet.similarity import incidence_from_long                          # noqa: E402
 
 
 def shuffle_within_ties(ii, jj, ss, rng):

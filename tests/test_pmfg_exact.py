@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
                                 "src"))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                 "validation"))
-from tasknet import pmfg_block, pmfg_reference              # noqa: E402
+from ocnet import pmfg_block, pmfg_reference              # noqa: E402
 from random_trials import one_trial                         # noqa: E402
 
 

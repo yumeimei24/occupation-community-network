@@ -23,8 +23,8 @@ import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                 "src"))
-from tasknet import ochiai_candidates, pmfg_block, pmfg_reference      # noqa: E402
-from tasknet.similarity import incidence_from_long                    # noqa: E402
+from ocnet import ochiai_candidates, pmfg_block, pmfg_reference      # noqa: E402
+from ocnet.similarity import incidence_from_long                    # noqa: E402
 
 
 def random_incidence(rng, n_nodes, n_feats, mode="community"):

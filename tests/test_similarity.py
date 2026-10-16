@@ -9,8 +9,8 @@ import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                 "src"))
-from tasknet import ochiai_candidates                      # noqa: E402
-from tasknet.similarity import incidence_from_long         # noqa: E402
+from ocnet import ochiai_candidates                      # noqa: E402
+from ocnet.similarity import incidence_from_long         # noqa: E402
 
 
 def test_ochiai_values():
